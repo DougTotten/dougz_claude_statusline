@@ -136,13 +136,25 @@ if [ -n "$model_name" ]; then
     line2_parts+=("$(printf "${blue}%s${reset}%s" "$model_name" "$effort")")
 fi
 
-# --- Segment 3: Context usage % ---
+# --- Segment 3: Context usage: token count + % ---
 # Match the context_window's used_percentage, which is always followed by remaining_percentage
 used_pct=$(printf '%s' "$input" | sed -n 's/.*"used_percentage"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\(\.[0-9]*\)\?\)[[:space:]]*,[[:space:]]*"remaining_percentage".*/\1/p' | head -1)
+# Derive token count from used_percentage × context_window_size
+ctx_window_size=$(printf '%s' "$input" | sed -n 's/.*"context_window_size"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -1)
+ctx_tokens=""
+if [ -n "$ctx_window_size" ] && [ -n "$used_pct" ]; then
+    ctx_tokens=$(echo "$used_pct $ctx_window_size" | awk '{printf "%.0f", $1/100*$2}')
+fi
 if [ -n "$used_pct" ]; then
     pct_int=$(printf "%.0f" "$used_pct")
     color=$(pct_color "$used_pct")
-    line2_parts+=("$(printf "${color}%s%%${reset}" "$pct_int")")
+    if [ -n "$ctx_tokens" ] && [ "$ctx_tokens" -gt 0 ] 2>/dev/null; then
+        # Format token count with thousands separator
+        formatted_tokens=$(printf "%d" "$ctx_tokens" | sed ':a;s/\([0-9]\)\([0-9]\{3\}\)\b/\1,\2/;ta')
+        line2_parts+=("$(printf "${color}%s tokens (%s%%)${reset}" "$formatted_tokens" "$pct_int")")
+    else
+        line2_parts+=("$(printf "${color}%s%%${reset}" "$pct_int")")
+    fi
 fi
 
 # --- Join with separator ---
